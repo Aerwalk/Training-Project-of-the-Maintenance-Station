@@ -1,0 +1,250 @@
+<div class="page">
+  <div class="page-head">
+    <div>
+      <p class="eyebrow">Автопарк</p>
+      <h1 class="page-title">Автомобили клиентов</h1>
+      <p class="page-sub">
+        Марки, модели, гос. номера и VIN всех машин, обслуживающихся в сервисе.
+      </p>
+    </div>
+    <div class="page-actions">
+      <button type="button" class="btn btn-ghost" (click)="load()" [disabled]="loading()">
+        <app-icon name="history" [size]="16" />
+        Обновить
+      </button>
+      <button type="button" class="btn btn-primary" (click)="openCreate()">
+        <app-icon name="plus" [size]="16" />
+        Добавить автомобиль
+      </button>
+    </div>
+  </div>
+
+  <div class="mini-stats">
+    <div class="mini-stat">
+      <span class="mini-icon teal"><app-icon name="car" [size]="18" /></span>
+      <span>
+        <strong>{{ cars().length }}</strong>
+        <span>{{ pluralWord(cars().length, 'автомобиль', 'автомобиля', 'автомобилей') }} в парке</span>
+      </span>
+    </div>
+    <div class="mini-stat">
+      <span class="mini-icon blue"><app-icon name="dashboard" [size]="18" /></span>
+      <span>
+        <strong>{{ brands() }}</strong>
+        <span>{{ pluralWord(brands(), 'марка', 'марки', 'марок') }} в парке</span>
+      </span>
+    </div>
+    <div class="mini-stat">
+      <span class="mini-icon violet"><app-icon name="clients" [size]="18" /></span>
+      <span>
+        <strong>{{ owners() }}</strong>
+        <span>{{ pluralWord(owners(), 'владелец', 'владельца', 'владельцев') }}</span>
+      </span>
+    </div>
+    <div class="mini-stat">
+      <span class="mini-icon orange"><app-icon name="clock" [size]="18" /></span>
+      <span>
+        <strong>{{ recentCars() }}</strong>
+        <span>{{ pluralWord(recentCars(), 'автомобиль', 'автомобиля', 'автомобилей') }} не старше 5 лет</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="toolbar card">
+    <div class="result-count">
+      <strong>{{ filtered().length }}</strong>
+      {{ pluralWord(filtered().length, 'автомобиль', 'автомобиля', 'автомобилей') }}
+    </div>
+    <div class="search cars-search">
+      <app-icon name="search" [size]="16" />
+      <input
+        type="search"
+        placeholder="Марка, номер, VIN или владелец…"
+        [value]="search()"
+        (input)="search.set($any($event.target).value)"
+        aria-label="Поиск автомобилей"
+      />
+      @if (search()) {
+        <button type="button" class="search-clear" (click)="search.set('')" aria-label="Очистить">
+          <app-icon name="close" [size]="13" />
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="car-grid">
+      @for (item of [1, 2, 3, 4]; track item) {
+        <div class="skeleton car-skeleton"></div>
+      }
+    </div>
+  } @else if (filtered().length === 0) {
+    <div class="card">
+      <div class="empty">
+        <span class="empty-icon"><app-icon name="car" [size]="22" /></span>
+        <strong>Автомобили не найдены</strong>
+        <span>Измените запрос или добавьте автомобиль клиента.</span>
+        <button type="button" class="btn btn-primary btn-sm" (click)="openCreate()">
+          <app-icon name="plus" [size]="14" />
+          Добавить автомобиль
+        </button>
+      </div>
+    </div>
+  } @else {
+    <div class="car-grid">
+      @for (car of filtered(); track car.id) {
+        <article class="car-card">
+          <div class="car-top">
+            <span class="car-mark" [style.background]="brandGradient(car.brand)">
+              <app-icon name="car" [size]="22" />
+            </span>
+            <div class="car-name">
+              <strong>{{ car.brand }} {{ car.model }}</strong>
+              <span>{{ car.year || 'год не указан' }} · запись #{{ car.id }}</span>
+            </div>
+            <span class="chip plate plate-lg">{{ car.plateNum }}</span>
+          </div>
+
+          <div class="car-owner">
+            <span class="avatar sm">{{ initials(car.clientName) }}</span>
+            <span class="owner-meta">
+              <span>Владелец</span>
+              <strong>{{ car.clientName }}</strong>
+            </span>
+            <a
+              class="owner-link"
+              routerLink="/clients"
+              [queryParams]="{ client: car.clientId }"
+              title="Открыть карточку клиента"
+            >
+              <app-icon name="arrow" [size]="15" />
+            </a>
+          </div>
+
+          <div class="car-vin">
+            <span>VIN</span>
+            <strong class="mono">{{ car.vin || '—' }}</strong>
+          </div>
+        </article>
+      }
+    </div>
+  }
+</div>
+
+<!-- ------------------------------------------------ добавление автомобиля -->
+
+@if (createOpen()) {
+  <div class="modal-backdrop" (click)="closeCreate()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <h2>Новый автомобиль</h2>
+          <p>Привяжите машину к клиенту сервиса</p>
+        </div>
+        <button type="button" class="modal-close" (click)="closeCreate()" aria-label="Закрыть">
+          <app-icon name="close" [size]="17" />
+        </button>
+      </div>
+
+      <form (submit)="$event.preventDefault(); create()">
+        <div class="modal-body">
+          <div class="form-grid">
+            <label class="field span-2">
+              <span class="label">Владелец *</span>
+              <select class="select" name="clientId" [(ngModel)]="newCar.clientId">
+                <option [ngValue]="null" disabled>Выберите клиента</option>
+                @for (client of clients(); track client.id) {
+                  <option [ngValue]="client.id">{{ client.fullName }} · {{ client.phone }}</option>
+                }
+              </select>
+              @if (selectedClient(); as client) {
+                <span class="hint">{{ client.email || 'E-mail не указан' }}</span>
+              } @else {
+                <span class="hint">
+                  Нет нужного клиента? Добавьте его в разделе
+                  <a routerLink="/clients" (click)="closeCreate()">«Клиенты»</a>.
+                </span>
+              }
+            </label>
+
+            <label class="field">
+              <span class="label">Марка *</span>
+              <input
+                class="input"
+                name="brand"
+                maxlength="50"
+                placeholder="Lada"
+                [(ngModel)]="newCar.brand"
+              />
+            </label>
+            <label class="field">
+              <span class="label">Модель *</span>
+              <input
+                class="input"
+                name="model"
+                maxlength="50"
+                placeholder="Vesta"
+                [(ngModel)]="newCar.model"
+              />
+            </label>
+            <label class="field">
+              <span class="label">Год выпуска</span>
+              <input
+                class="input"
+                type="number"
+                name="year"
+                min="1950"
+                max="2100"
+                placeholder="2021"
+                [(ngModel)]="newCar.year"
+              />
+            </label>
+            <label class="field">
+              <span class="label">Гос. номер *</span>
+              <input
+                class="input"
+                name="plateNum"
+                maxlength="15"
+                placeholder="А123ВС64"
+                [(ngModel)]="newCar.plateNum"
+              />
+            </label>
+            <label class="field span-2">
+              <span class="label">VIN</span>
+              <input
+                class="input mono"
+                name="vin"
+                maxlength="17"
+                placeholder="17 символов"
+                [(ngModel)]="newCar.vin"
+              />
+              <span class="hint">Необязательное поле, не длиннее 17 символов.</span>
+            </label>
+          </div>
+
+          @if (createError()) {
+            <div class="error-text form-error">
+              <app-icon name="alert" [size]="15" />
+              {{ createError() }}
+            </div>
+          }
+        </div>
+
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" (click)="closeCreate()" [disabled]="creating()">
+            Отмена
+          </button>
+          <button type="submit" class="btn btn-primary" [disabled]="!canCreate()">
+            @if (creating()) {
+              <span class="spinner"></span>
+              Сохраняем…
+            } @else {
+              <app-icon name="check" [size]="16" />
+              Добавить автомобиль
+            }
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}

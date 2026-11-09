@@ -40,6 +40,24 @@ public final class CarRepository {
         });
     }
 
+    public List<Car> findAll() {
+        return connectionManager.withConnection("cars.findAll", connection -> {
+            String sql = """
+                    SELECT id, client_id, brand, model, year, plate_num, vin
+                    FROM cars
+                    ORDER BY id
+                    """;
+            try (PreparedStatement statement = connection.prepareStatement(sql);
+                 ResultSet resultSet = statement.executeQuery()) {
+                List<Car> cars = new ArrayList<>();
+                while (resultSet.next()) {
+                    cars.add(mapCar(resultSet));
+                }
+                return cars;
+            }
+        });
+    }
+
     public Optional<Car> findById(int id) {
         return connectionManager.withConnection("cars.findById", connection -> {
             String sql = """

@@ -1,0 +1,158 @@
+<div class="login-page">
+  <section class="login-hero">
+    <div class="hero-glow hero-glow-a"></div>
+    <div class="hero-glow hero-glow-b"></div>
+
+    <div class="hero-top">
+      <span class="hero-brand">
+        <span class="brand-mark">
+          <app-icon name="car" [size]="24" />
+        </span>
+        <span class="brand-text">
+          <strong>СТО · Гараж</strong>
+          <span>учёт и заявки</span>
+        </span>
+      </span>
+      <span class="hero-badge">УП.01.02 · ПМ.01</span>
+    </div>
+
+    <div class="hero-copy">
+      <p class="hero-eyebrow">
+        <span></span>
+        Модуль доступа к базе данных
+      </p>
+      <h1>
+        Сервис, в котором<br />
+        <em>видно всё</em>
+      </h1>
+      <p class="hero-lead">
+        Заявки, клиенты, автомобили и мастера — в одном интерфейсе поверх настоящей PostgreSQL.
+        Данные не имитация: каждая карточка читается из базы СТО.
+      </p>
+
+      <ul class="hero-features">
+        <li>
+          <span class="feature-icon"><app-icon name="orders" [size]="18" /></span>
+          <span>
+            <strong>Жизненный цикл заявки</strong>
+            <span>Создание, услуги, закрытие и журнал статусов</span>
+          </span>
+        </li>
+        <li>
+          <span class="feature-icon"><app-icon name="database" [size]="18" /></span>
+          <span>
+            <strong>Реальные данные</strong>
+            <span>REST API работает через HikariCP и хранимые функции</span>
+          </span>
+        </li>
+        <li>
+          <span class="feature-icon"><app-icon name="masters" [size]="18" /></span>
+          <span>
+            <strong>Роли и доступ</strong>
+            <span>Администратор, менеджер, мастер и клиент</span>
+          </span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="hero-foot">
+      <span>PostgreSQL 16</span>
+      <span class="hero-sep"></span>
+      <span>Java 23</span>
+      <span class="hero-sep"></span>
+      <span>Angular 20</span>
+    </div>
+  </section>
+
+  <section class="login-panel">
+    <div class="login-card">
+      <div class="login-head">
+        <p class="eyebrow">Вход в систему</p>
+        <h2>С возвращением</h2>
+        <p>Введите учётные данные, чтобы открыть рабочее пространство сервиса.</p>
+      </div>
+
+      <form class="login-form" (submit)="$event.preventDefault(); submit()">
+        <label class="field">
+          <span class="label">Логин</span>
+          <span class="input-wrap">
+            <app-icon name="clients" [size]="17" />
+            <input
+              class="input"
+              name="username"
+              autocomplete="username"
+              [(ngModel)]="username"
+              placeholder="admin"
+              required
+            />
+          </span>
+        </label>
+
+        <label class="field">
+          <span class="label">Пароль</span>
+          <span class="input-wrap">
+            <app-icon name="eyeOff" [size]="17" />
+            <input
+              class="input"
+              name="password"
+              [type]="showPassword() ? 'text' : 'password'"
+              autocomplete="current-password"
+              [(ngModel)]="password"
+              placeholder="••••••••"
+              required
+            />
+            <button
+              type="button"
+              class="input-action"
+              (click)="showPassword.set(!showPassword())"
+              [attr.aria-label]="showPassword() ? 'Скрыть пароль' : 'Показать пароль'"
+            >
+              <app-icon [name]="showPassword() ? 'eyeOff' : 'eye'" [size]="17" />
+            </button>
+          </span>
+        </label>
+
+        @if (error()) {
+          <div class="error-text">
+            <app-icon name="alert" [size]="15" />
+            {{ error() }}
+          </div>
+        }
+
+        <button type="submit" class="btn btn-primary btn-block login-submit" [disabled]="loading()">
+          @if (loading()) {
+            <span class="spinner"></span>
+            Проверяем…
+          } @else {
+            Войти в систему
+            <app-icon name="arrow" [size]="16" />
+          }
+        </button>
+      </form>
+
+      <div class="demo-block">
+        <div class="demo-head">
+          <span>Демонстрационные учётные записи</span>
+          <span class="demo-hint">нажмите, чтобы подставить</span>
+        </div>
+        <div class="demo-grid">
+          @for (account of demoAccounts; track account.username) {
+            <button type="button" class="demo-card" (click)="useAccount(account)">
+              <span class="demo-icon"><app-icon [name]="account.icon" [size]="16" /></span>
+              <span class="demo-meta">
+                <strong>{{ account.role }}</strong>
+                <span>{{ account.username }}</span>
+              </span>
+            </button>
+          }
+        </div>
+      </div>
+
+      <p class="login-note">
+        <app-icon name="database" [size]="14" />
+        Для входа нужен запущенный API:
+        <code>java -jar sto-db-module.jar --web</code>
+      </p>
+    </div>
+  </section>
+</div>

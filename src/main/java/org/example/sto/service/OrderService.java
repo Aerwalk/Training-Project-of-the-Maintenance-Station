@@ -5,6 +5,7 @@ import org.example.sto.exception.ValidationException;
 import org.example.sto.model.ClientOrder;
 import org.example.sto.model.Master;
 import org.example.sto.model.Order;
+import org.example.sto.model.OrderServiceItem;
 import org.example.sto.model.OrderStatus;
 import org.example.sto.model.OrderStatusLogEntry;
 import org.example.sto.model.OrderSummary;
@@ -17,6 +18,7 @@ import org.example.sto.repository.ServiceRepository;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -113,6 +115,11 @@ public final class OrderService {
         return orderRepository.calculateTotal(orderId);
     }
 
+    public List<OrderServiceItem> orderServices(int orderId) {
+        getOrder(orderId);
+        return orderRepository.findServices(orderId);
+    }
+
     public List<ClientOrder> clientOrders(int clientId) {
         if (clientRepository.findById(clientId).isEmpty()) {
             throw new EntityNotFoundException("Клиент с id=" + clientId + " не найден");
@@ -135,5 +142,9 @@ public final class OrderService {
 
     public List<OrderStatusLogEntry> statusLog(Integer orderId) {
         return orderRepository.findStatusLog(orderId);
+    }
+
+    public Map<Integer, Integer> masterWorkload() {
+        return orderRepository.activeOrdersByMaster();
     }
 }

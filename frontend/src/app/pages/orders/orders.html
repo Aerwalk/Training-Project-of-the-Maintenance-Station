@@ -1,0 +1,485 @@
+<div class="page">
+  <div class="page-head">
+    <div>
+      <p class="eyebrow">Рабочий процесс</p>
+      <h1 class="page-title">Заявки сервиса</h1>
+      <p class="page-sub">
+        Полный цикл: приём автомобиля, добавление услуг и закрытие заявки с записью в журнал.
+      </p>
+    </div>
+    <div class="page-actions">
+      <button type="button" class="btn btn-ghost" (click)="load()" [disabled]="loading()">
+        <app-icon name="history" [size]="16" />
+        Обновить
+      </button>
+      <button type="button" class="btn btn-primary" (click)="openCreate()">
+        <app-icon name="plus" [size]="16" />
+        Новая заявка
+      </button>
+    </div>
+  </div>
+
+  <div class="toolbar card">
+    <div class="tabs">
+      @for (tab of tabs; track tab.key) {
+        <button
+          type="button"
+          class="tab"
+          [class.active]="filter() === tab.key"
+          (click)="setFilter(tab.key)"
+        >
+          {{ tab.label }}
+          <span class="tab-count">{{ countFor(tab.key) }}</span>
+        </button>
+      }
+    </div>
+
+    <div class="search orders-search">
+      <app-icon name="search" [size]="16" />
+      <input
+        type="search"
+        placeholder="Номер, клиент, автомобиль…"
+        [value]="search()"
+        (input)="search.set($any($event.target).value)"
+        aria-label="Поиск по заявкам"
+      />
+      @if (search()) {
+        <button type="button" class="search-clear" (click)="search.set('')" aria-label="Очистить">
+          <app-icon name="close" [size]="13" />
+        </button>
+      }
+    </div>
+  </div>
+
+  <section class="card table-card">
+    <div class="card-body">
+      @if (loading()) {
+        <div class="skeleton skeleton-row"></div>
+        <div class="skeleton skeleton-row"></div>
+        <div class="skeleton skeleton-row"></div>
+        <div class="skeleton skeleton-row"></div>
+      } @else if (filteredOrders().length === 0) {
+        <div class="empty">
+          <span class="empty-icon"><app-icon name="orders" [size]="22" /></span>
+          <strong>Заявки не найдены</strong>
+          <span>Измените фильтр или создайте новую заявку.</span>
+          <button type="button" class="btn btn-primary btn-sm" (click)="openCreate()">
+            <app-icon name="plus" [size]="14" />
+            Создать заявку
+          </button>
+        </div>
+      } @else {
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Заявка</th>
+                <th>Клиент</th>
+                <th>Автомобиль</th>
+                <th>Статус</th>
+                <th class="right">Стоимость</th>
+                <th class="right">Действие</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (order of filteredOrders(); track order.orderId) {
+                <tr class="row-link" (click)="openDetail(order.orderId)">
+                  <td>
+                    <span class="order-link">#{{ order.orderId }}</span>
+                  </td>
+                  <td>
+                    <span class="strong">{{ order.client }}</span>
+                  </td>
+                  <td>
+                    <span class="chip plate">{{ order.car }}</span>
+                  </td>
+                  <td>
+                    <span class="badge" [class]="'badge ' + statusClass(order.status)">
+                      {{ order.status }}
+                    </span>
+                  </td>
+                  <td class="right strong">{{ money(order.totalCost) }}</td>
+                  <td class="right">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-sm"
+                      (click)="$event.stopPropagation(); openDetail(order.orderId)"
+                    >
+                      <app-icon name="eye" [size]="14" />
+                      Открыть
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="table-foot">
+          Показано {{ filteredOrders().length }} из {{ orders().length }}
+          {{ pluralWord(orders().length, 'заявки', 'заявок', 'заявок') }}
+        </div>
+      }
+    </div>
+  </section>
+</div>
+
+<!-- ------------------------------------------------------- создание заявки -->
+
+@if (createOpen()) {
+  <div class="modal-backdrop" (click)="closeCreate()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <h2>Новая заявка</h2>
+          <p>Клиент, автомобиль и описание неисправности</p>
+        </div>
+        <button type="button" class="modal-close" (click)="closeCreate()" aria-label="Закрыть">
+          <app-icon name="close" [size]="17" />
+        </button>
+      </div>
+
+      <form (submit)="$event.preventDefault(); create()">
+        <div class="modal-body">
+          <div class="form-grid">
+            <label class="field">
+              <span class="label">Клиент *</span>
+              <select
+                class="select"
+                name="clientId"
+                [ngModel]="newOrder.clientId"
+                (ngModelChange)="onClientChange($event)"
+              >
+                <option [ngValue]="null" disabled>Выберите клиента</option>
+                @for (client of clients(); track client.id) {
+                  <option [ngValue]="client.id">{{ client.fullName }} · {{ client.phone }}</option>
+                }
+              </select>
+              @if (selectedClient(); as client) {
+                <span class="hint">{{ client.email || 'E-mail не указан' }}</span>
+              }
+            </label>
+
+            <label class="field">
+              <span class="label">Автомобиль *</span>
+              <select
+                class="select"
+                name="carId"
+                [(ngModel)]="newOrder.carId"
+                [disabled]="!newOrder.clientId"
+              >
+                <option [ngValue]="null" disabled>
+                  {{ newOrder.clientId ? 'Выберите автомобиль' : 'Сначала выберите клиента' }}
+                </option>
+                @for (car of carsForSelected(); track car.id) {
+                  <option [ngValue]="car.id">
+                    {{ car.brand }} {{ car.model }} · {{ car.plateNum }}
+                  </option>
+                }
+              </select>
+              @if (newOrder.clientId && carsForSelected().length === 0) {
+                <span class="hint hint-warn">
+                  У клиента нет автомобилей. Добавьте его в разделе «Автомобили».
+                </span>
+              }
+            </label>
+
+            <label class="field span-2">
+              <span class="label">Мастер</span>
+              <select class="select" name="masterId" [(ngModel)]="newOrder.masterId">
+                <option [ngValue]="null">Не назначать</option>
+                @for (master of masters(); track master.id) {
+                  <option [ngValue]="master.id" [disabled]="!master.active">
+                    {{ master.fullName }}{{ master.specialization ? ' · ' + master.specialization : '' }}
+                    {{ master.active ? '' : ' (неактивен)' }}
+                  </option>
+                }
+              </select>
+              <span class="hint">Мастера можно назначить позже — при изменении статуса заявки.</span>
+            </label>
+
+            <label class="field span-2">
+              <span class="label">Описание неисправности *</span>
+              <textarea
+                class="textarea"
+                name="description"
+                maxlength="2000"
+                placeholder="Например: стук в передней подвеске при проезде неровностей"
+                [(ngModel)]="newOrder.description"
+              ></textarea>
+              <span class="hint">{{ newOrder.description.length }} / 2000 символов</span>
+            </label>
+          </div>
+
+          @if (createError()) {
+            <div class="error-text form-error">
+              <app-icon name="alert" [size]="15" />
+              {{ createError() }}
+            </div>
+          }
+        </div>
+
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" (click)="closeCreate()" [disabled]="creating()">
+            Отмена
+          </button>
+          <button type="submit" class="btn btn-primary" [disabled]="!canCreate()">
+            @if (creating()) {
+              <span class="spinner"></span>
+              Создаём…
+            } @else {
+              <app-icon name="check" [size]="16" />
+              Создать заявку
+            }
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}
+
+<!-- ------------------------------------------------------- карточка заявки -->
+
+@if (detailOpen()) {
+  <div class="modal-backdrop" (click)="closeDetail()">
+    <div class="modal wide" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          @if (detail(); as d) {
+            <div class="ticket-title">
+              <h2>Заявка #{{ d.order.id }}</h2>
+              <span class="badge" [class]="'badge ' + statusClass(d.order.statusName)">
+                {{ d.order.statusName }}
+              </span>
+            </div>
+            <p>{{ d.client.fullName }} · {{ d.car.brand }} {{ d.car.model }} · {{ d.car.plateNum }}</p>
+          } @else {
+            <h2>Заявка</h2>
+            <p>Загрузка данных…</p>
+          }
+        </div>
+        <button type="button" class="modal-close" (click)="closeDetail()" aria-label="Закрыть">
+          <app-icon name="close" [size]="17" />
+        </button>
+      </div>
+
+      <div class="modal-body">
+        @if (detailLoading()) {
+          <div class="loading-line">
+            <span class="spinner dark"></span>
+            Читаем заявку из базы…
+          </div>
+        } @else if (detail(); as d) {
+          <div class="ticket-hero">
+            <div class="ticket-meta">
+              <span class="ticket-icon blue"><app-icon name="clients" [size]="17" /></span>
+              <span>
+                <span class="ticket-label">Клиент</span>
+                <strong>{{ d.client.fullName }}</strong>
+                <span class="ticket-sub">{{ d.client.phone }}</span>
+              </span>
+            </div>
+            <div class="ticket-meta">
+              <span class="ticket-icon teal"><app-icon name="car" [size]="17" /></span>
+              <span>
+                <span class="ticket-label">Автомобиль</span>
+                <strong>{{ d.car.brand }} {{ d.car.model }}</strong>
+                <span class="ticket-sub">{{ d.car.plateNum }} · {{ d.car.year || 'год не указан' }}</span>
+              </span>
+            </div>
+            <div class="ticket-meta">
+              <span class="ticket-icon violet"><app-icon name="masters" [size]="17" /></span>
+              <span>
+                <span class="ticket-label">Мастер</span>
+                <strong>{{ d.masterName || 'Не назначен' }}</strong>
+                <span class="ticket-sub">{{ d.order.statusName }}</span>
+              </span>
+            </div>
+            <div class="ticket-total">
+              <span class="ticket-label">Итого по заявке</span>
+              <strong>{{ money(d.total) }}</strong>
+              <span class="ticket-sub">{{ plural(d.services.length, 'услуга', 'услуги', 'услуг') }}</span>
+            </div>
+          </div>
+
+          <div class="detail-grid">
+            <div class="detail-item">
+              <span>Создана</span>
+              <strong>{{ dateTime(d.order.createdAt) }}</strong>
+            </div>
+            <div class="detail-item">
+              <span>Закрыта</span>
+              <strong>{{ dateTime(d.order.closedAt) }}</strong>
+            </div>
+            <div class="detail-item">
+              <span>VIN</span>
+              <strong class="mono">{{ d.car.vin || '—' }}</strong>
+            </div>
+            <div class="detail-item">
+              <span>Телефон клиента</span>
+              <strong>{{ d.client.phone }}</strong>
+            </div>
+          </div>
+
+          <div class="description-box">
+            <span>Описание неисправности</span>
+            <p>{{ d.order.description }}</p>
+          </div>
+
+          <div class="section-head">
+            <h3>Оказанные услуги</h3>
+            <span class="badge plain">{{ d.services.length }}</span>
+          </div>
+
+          @if (d.services.length === 0) {
+            <div class="empty small">
+              <span class="empty-icon"><app-icon name="services" [size]="19" /></span>
+              <span>В заявку пока не добавлено ни одной услуги.</span>
+            </div>
+          } @else {
+            <div class="table-wrap service-table">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Услуга</th>
+                    <th class="right">Цена</th>
+                    <th class="right">Кол-во</th>
+                    <th class="right">Сумма</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (item of d.services; track item.id) {
+                    <tr>
+                      <td class="strong">{{ item.serviceName }}</td>
+                      <td class="right">{{ money(item.priceAt) }}</td>
+                      <td class="right">{{ item.quantity }}</td>
+                      <td class="right strong">{{ money(item.lineTotal) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+
+          @if (!isFinished(d.order.statusName)) {
+            <div class="add-service">
+              <div class="field">
+                <span class="label">Добавить услугу</span>
+                <select class="select" name="serviceId" [(ngModel)]="newService.serviceId">
+                  <option [ngValue]="null" disabled>Выберите услугу</option>
+                  @for (service of services(); track service.id) {
+                    <option [ngValue]="service.id">
+                      {{ service.name }} — {{ money(service.price) }}
+                      {{ service.durationMin ? ' · ' + service.durationMin + ' мин' : '' }}
+                    </option>
+                  }
+                </select>
+              </div>
+              <div class="field qty-field">
+                <span class="label">Кол-во</span>
+                <input
+                  class="input"
+                  type="number"
+                  min="1"
+                  max="100"
+                  name="quantity"
+                  [(ngModel)]="newService.quantity"
+                />
+              </div>
+              <button
+                type="button"
+                class="btn btn-primary add-service-btn"
+                (click)="addService()"
+                [disabled]="addingService()"
+              >
+                @if (addingService()) {
+                  <span class="spinner"></span>
+                } @else {
+                  <app-icon name="plus" [size]="15" />
+                }
+                Добавить
+              </button>
+            </div>
+            @if (addServiceError()) {
+              <div class="error-text form-error">
+                <app-icon name="alert" [size]="15" />
+                {{ addServiceError() }}
+              </div>
+            }
+          }
+
+          <div class="section-head">
+            <h3>История статусов</h3>
+            <span class="badge plain">{{ detailLog().length }}</span>
+          </div>
+
+          @if (detailLog().length === 0) {
+            <p class="muted small-text">Статус ещё не менялся — журнал пуст.</p>
+          } @else {
+            <div class="timeline">
+              @for (entry of detailLog(); track entry.id) {
+                <div class="timeline-item">
+                  <span class="timeline-dot"><app-icon name="history" [size]="14" /></span>
+                  <div class="timeline-body">
+                    <strong>
+                      {{ statusName(entry.oldStatusId) }} → {{ statusName(entry.newStatusId) }}
+                    </strong>
+                    <span>{{ dateTime(entry.changedAt) }} · {{ entry.changedBy }}</span>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+
+          @if (confirmClose()) {
+            <div class="confirm-box">
+              <span class="confirm-icon"><app-icon name="alert" [size]="19" /></span>
+              <div class="confirm-text">
+                <strong>Завершить заявку #{{ d.order.id }}?</strong>
+                <span>
+                  Статус изменится на «завершена», установится время закрытия, а триггер запишет
+                  событие в журнал.
+                </span>
+              </div>
+              <div class="confirm-actions">
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  (click)="cancelClose()"
+                  [disabled]="closing()"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-danger btn-sm"
+                  (click)="doClose()"
+                  [disabled]="closing()"
+                >
+                  @if (closing()) {
+                    <span class="spinner dark"></span>
+                  }
+                  Да, завершить
+                </button>
+              </div>
+            </div>
+          }
+        }
+      </div>
+
+      @if (detail(); as d) {
+        <div class="modal-foot detail-foot">
+          <span class="foot-hint">Стоимость рассчитана функцией calculate_order_total.</span>
+          <div class="page-actions">
+            @if (!isFinished(d.order.statusName)) {
+              <button type="button" class="btn btn-danger" (click)="askClose()">
+                <app-icon name="check" [size]="16" />
+                Завершить заявку
+              </button>
+            }
+            <button type="button" class="btn btn-ghost" (click)="closeDetail()">Закрыть</button>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+}

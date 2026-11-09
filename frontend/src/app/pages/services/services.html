@@ -1,0 +1,201 @@
+<div class="page">
+  <div class="page-head">
+    <div>
+      <p class="eyebrow">Прайс-лист</p>
+      <h1 class="page-title">Услуги и работы</h1>
+      <p class="page-sub">
+        Стоимость и нормативная длительность работ. Цена услуги фиксируется в заявке на момент
+        добавления.
+      </p>
+    </div>
+    <div class="page-actions">
+      <button type="button" class="btn btn-ghost" (click)="load()" [disabled]="loading()">
+        <app-icon name="history" [size]="16" />
+        Обновить
+      </button>
+      <button type="button" class="btn btn-primary" (click)="openCreate()">
+        <app-icon name="plus" [size]="16" />
+        Добавить услугу
+      </button>
+    </div>
+  </div>
+
+  <div class="mini-stats">
+    <div class="mini-stat">
+      <span class="mini-icon orange"><app-icon name="services" [size]="18" /></span>
+      <span>
+        <strong>{{ services().length }}</strong>
+        <span>{{ pluralWord(services().length, 'услуга', 'услуги', 'услуг') }} в прайсе</span>
+      </span>
+    </div>
+    <div class="mini-stat">
+      <span class="mini-icon green"><app-icon name="ruble" [size]="18" /></span>
+      <span>
+        <strong>{{ money(avgPrice()) }}</strong>
+        <span>средняя стоимость</span>
+      </span>
+    </div>
+    <div class="mini-stat">
+      <span class="mini-icon blue"><app-icon name="trend" [size]="18" /></span>
+      <span>
+        <strong>{{ money(maxPrice()) }}</strong>
+        <span>максимальная цена</span>
+      </span>
+    </div>
+    <div class="mini-stat">
+      <span class="mini-icon violet"><app-icon name="clock" [size]="18" /></span>
+      <span>
+        <strong>{{ avgDuration() }} мин</strong>
+        <span>средняя длительность</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="toolbar card">
+    <div class="search services-search">
+      <app-icon name="search" [size]="16" />
+      <input
+        type="search"
+        placeholder="Название услуги…"
+        [value]="search()"
+        (input)="search.set($any($event.target).value)"
+        aria-label="Поиск услуг"
+      />
+      @if (search()) {
+        <button type="button" class="search-clear" (click)="search.set('')" aria-label="Очистить">
+          <app-icon name="close" [size]="13" />
+        </button>
+      }
+    </div>
+
+    <label class="sort-control">
+      <span>Сортировка</span>
+      <select class="select" [ngModel]="sort()" (ngModelChange)="sort.set($event)">
+        <option value="name">По названию</option>
+        <option value="price-asc">Сначала дешевле</option>
+        <option value="price-desc">Сначала дороже</option>
+      </select>
+    </label>
+  </div>
+
+  @if (loading()) {
+    <div class="service-grid">
+      @for (item of [1, 2, 3, 4, 5, 6]; track item) {
+        <div class="skeleton service-skeleton"></div>
+      }
+    </div>
+  } @else if (filtered().length === 0) {
+    <div class="card">
+      <div class="empty">
+        <span class="empty-icon"><app-icon name="services" [size]="22" /></span>
+        <strong>Услуги не найдены</strong>
+        <span>Измените запрос или добавьте новую услугу в прайс.</span>
+        <button type="button" class="btn btn-primary btn-sm" (click)="openCreate()">
+          <app-icon name="plus" [size]="14" />
+          Добавить услугу
+        </button>
+      </div>
+    </div>
+  } @else {
+    <div class="service-grid">
+      @for (service of filtered(); track service.id) {
+        <article class="service-card">
+          <div class="service-top">
+            <span class="service-icon"><app-icon name="services" [size]="20" /></span>
+            <span class="service-id">#{{ service.id }}</span>
+          </div>
+          <h3>{{ service.name }}</h3>
+          <div class="service-price">{{ money(service.price) }}</div>
+          <div class="service-foot">
+            <span class="chip">
+              <app-icon name="clock" [size]="13" />
+              {{ service.durationMin ? service.durationMin + ' мин' : 'время не задано' }}
+            </span>
+            <span class="service-apply">в заявку</span>
+          </div>
+        </article>
+      }
+    </div>
+  }
+</div>
+
+<!-- ---------------------------------------------------- добавление услуги -->
+
+@if (createOpen()) {
+  <div class="modal-backdrop" (click)="closeCreate()">
+    <div class="modal" (click)="$event.stopPropagation()">
+      <div class="modal-head">
+        <div>
+          <h2>Новая услуга</h2>
+          <p>Стоимость и длительность работы для прайс-листа</p>
+        </div>
+        <button type="button" class="modal-close" (click)="closeCreate()" aria-label="Закрыть">
+          <app-icon name="close" [size]="17" />
+        </button>
+      </div>
+
+      <form (submit)="$event.preventDefault(); create()">
+        <div class="modal-body">
+          <div class="form-grid">
+            <label class="field span-2">
+              <span class="label">Название услуги *</span>
+              <input
+                class="input"
+                name="name"
+                maxlength="150"
+                placeholder="Например: замена масла в двигателе"
+                [(ngModel)]="newService.name"
+              />
+            </label>
+            <label class="field">
+              <span class="label">Стоимость, ₽ *</span>
+              <input
+                class="input"
+                type="number"
+                name="price"
+                min="0"
+                step="0.01"
+                placeholder="1500"
+                [(ngModel)]="newService.price"
+              />
+            </label>
+            <label class="field">
+              <span class="label">Длительность, мин</span>
+              <input
+                class="input"
+                type="number"
+                name="durationMin"
+                min="1"
+                placeholder="40"
+                [(ngModel)]="newService.durationMin"
+              />
+              <span class="hint">Необязательное поле, больше нуля.</span>
+            </label>
+          </div>
+
+          @if (createError()) {
+            <div class="error-text form-error">
+              <app-icon name="alert" [size]="15" />
+              {{ createError() }}
+            </div>
+          }
+        </div>
+
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" (click)="closeCreate()" [disabled]="creating()">
+            Отмена
+          </button>
+          <button type="submit" class="btn btn-primary" [disabled]="!canCreate()">
+            @if (creating()) {
+              <span class="spinner"></span>
+              Сохраняем…
+            } @else {
+              <app-icon name="check" [size]="16" />
+              Добавить услугу
+            }
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+}

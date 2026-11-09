@@ -1,0 +1,162 @@
+<div class="page">
+  <div class="page-head">
+    <div>
+      <p class="eyebrow">Аудит</p>
+      <h1 class="page-title">Журнал статусов</h1>
+      <p class="page-sub">
+        Каждое изменение статуса заявки записывается триггером <code>trigger_log_status_change</code>
+        на стороне PostgreSQL.
+      </p>
+    </div>
+    <div class="page-actions">
+      <button type="button" class="btn btn-ghost" (click)="load()" [disabled]="loading()">
+        <app-icon name="history" [size]="16" />
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <div class="mini-stats">
+    <div class="mini-stat">
+      <span class="mini-icon blue"><app-icon name="history" [size]="18" /></span>
+      <span>
+        <strong>{{ log().length }}</strong>
+        <span>{{ pluralWord(log().length, 'событие', 'события', 'событий') }} в журнале</span>
+      </span>
+    </div>
+    <div class="mini-stat">
+      <span class="mini-icon green"><app-icon name="clock" [size]="18" /></span>
+      <span>
+        <strong>{{ todayCount() }}</strong>
+        <span>{{ pluralWord(todayCount(), 'изменение', 'изменения', 'изменений') }} сегодня</span>
+      </span>
+    </div>
+    <div class="mini-stat">
+      <span class="mini-icon orange"><app-icon name="orders" [size]="18" /></span>
+      <span>
+        <strong>{{ uniqueOrders() }}</strong>
+        <span>{{ pluralWord(uniqueOrders(), 'заявка затронута', 'заявки затронуты', 'заявок затронуто') }}</span>
+      </span>
+    </div>
+    <div class="mini-stat">
+      <span class="mini-icon violet"><app-icon name="clients" [size]="18" /></span>
+      <span>
+        <strong>{{ uniqueAuthors() }}</strong>
+        <span>{{ pluralWord(uniqueAuthors(), 'автор изменений', 'автора изменений', 'авторов изменений') }}</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="toolbar card">
+    <div class="filter-group">
+      <label class="filter-field">
+        <span>Заявка</span>
+        <select
+          class="select"
+          [ngModel]="orderFilter()"
+          (ngModelChange)="orderFilter.set($event)"
+          aria-label="Фильтр по заявке"
+        >
+          <option [ngValue]="null">Все заявки</option>
+          @for (order of orders(); track order.orderId) {
+            <option [ngValue]="order.orderId">#{{ order.orderId }} — {{ order.client }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="search log-search">
+        <app-icon name="search" [size]="16" />
+        <input
+          type="search"
+          placeholder="Клиент, автомобиль, автор…"
+          [value]="search()"
+          (input)="search.set($any($event.target).value)"
+          aria-label="Поиск по журналу"
+        />
+      </div>
+    </div>
+
+    <div class="filter-actions">
+      <span class="result-count">Найдено: <strong>{{ filtered().length }}</strong></span>
+      @if (search() || orderFilter() !== null) {
+        <button type="button" class="btn btn-ghost btn-sm" (click)="resetFilters()">
+          <app-icon name="close" [size]="13" />
+          Сбросить
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="log-skeletons">
+      @for (item of [1, 2, 3, 4]; track item) {
+        <div class="skeleton log-skeleton"></div>
+      }
+    </div>
+  } @else if (groups().length === 0) {
+    <div class="card">
+      <div class="empty">
+        <span class="empty-icon"><app-icon name="history" [size]="22" /></span>
+        <strong>Событий не найдено</strong>
+        <span>Измените фильтры или завершите заявку, чтобы триггер записал событие.</span>
+        <button type="button" class="btn btn-ghost btn-sm" (click)="resetFilters()">
+          Сбросить фильтры
+        </button>
+      </div>
+    </div>
+  } @else {
+    <div class="log-groups">
+      @for (group of groups(); track group.key) {
+        <section class="log-group">
+          <header class="log-day">
+            <span class="log-day-label">{{ group.label }}</span>
+            <span class="log-day-count">{{ plural(group.entries.length, 'событие', 'события', 'событий') }}</span>
+          </header>
+
+          <div class="log-entries">
+            @for (entry of group.entries; track entry.id) {
+              <article class="log-entry">
+                <div class="log-time">
+                  <strong>{{ time(entry.changedAt) }}</strong>
+                  <span>#{{ entry.id }}</span>
+                </div>
+                <span class="log-dot"></span>
+                <div class="log-card">
+                  <div class="log-top">
+                    <a
+                      class="order-chip"
+                      routerLink="/orders"
+                      [queryParams]="{ order: entry.orderId }"
+                    >
+                      Заявка #{{ entry.orderId }}
+                    </a>
+                    @if (orderOf(entry.orderId); as order) {
+                      <span class="log-client">{{ order.client }}</span>
+                      <span class="chip plate">{{ order.car }}</span>
+                    } @else {
+                      <span class="log-client muted">Заявка удалена или недоступна</span>
+                    }
+                    <span class="log-author">
+                      <app-icon name="clients" [size]="13" />
+                      {{ entry.changedBy }}
+                    </span>
+                  </div>
+
+                  <div class="log-status">
+                    <span class="badge" [class]="'badge ' + statusClass(statusName(entry.oldStatusId))">
+                      {{ statusName(entry.oldStatusId) }}
+                    </span>
+                    <span class="status-arrow"><app-icon name="arrow" [size]="15" /></span>
+                    <span class="badge" [class]="'badge ' + statusClass(statusName(entry.newStatusId))">
+                      {{ statusName(entry.newStatusId) }}
+                    </span>
+                  </div>
+                </div>
+              </article>
+            }
+          </div>
+        </section>
+      }
+    </div>
+  }
+</div>

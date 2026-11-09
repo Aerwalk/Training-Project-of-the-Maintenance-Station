@@ -16,6 +16,7 @@ import org.example.sto.repository.UserRepository;
 import org.example.sto.service.AuthService;
 import org.example.sto.service.CatalogService;
 import org.example.sto.service.OrderService;
+import org.example.sto.web.ApiServer;
 
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
@@ -33,6 +34,7 @@ import java.util.List;
  *   java -jar sto-db-module.jar --demo       автоматический smoke-сценарий
  *   java -jar sto-db-module.jar --check      проверка соединения и версии PostgreSQL
  *   java -jar sto-db-module.jar --list-orders список заявок без входа
+ *   java -jar sto-db-module.jar --web         REST API и Angular-интерфейс на :8080
  *   java -jar sto-db-module.jar --help       справка
  * </pre>
  */
@@ -47,6 +49,11 @@ public final class StoApplication {
         boolean demo = hasArg(args, "--demo");
         boolean check = hasArg(args, "--check");
         boolean listOrders = hasArg(args, "--list-orders");
+        String webArg = Arrays.stream(args)
+                .filter(arg -> arg.equals("--web") || arg.startsWith("--web="))
+                .findFirst()
+                .orElse(null);
+        boolean web = webArg != null;
         boolean help = hasArg(args, "--help") || hasArg(args, "-h");
 
         if (help) {
@@ -89,6 +96,26 @@ public final class StoApplication {
                 return;
             }
 
+            if (web) {
+                int port = webPort(webArg);
+                try {
+                    ApiServer apiServer = new ApiServer(
+                            port, authService, catalogService, orderService, connectionManager);
+                    Runtime.getRuntime().addShutdownHook(new Thread(apiServer::stop, "sto-web-shutdown"));
+                    apiServer.start();
+                    System.out.println("Веб-интерфейс: http://localhost:" + port + "/");
+                    System.out.println("REST API:      http://localhost:" + port + "/api/health");
+                    System.out.println("Для остановки нажмите Ctrl+C.");
+                    apiServer.await();
+                } catch (java.io.IOException e) {
+                    System.err.println("Не удалось запустить веб-сервер на порту " + port + ": " + e.getMessage());
+                    System.exit(1);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                return;
+            }
+
             if (demo) {
                 new DemoRunner(authService, catalogService, orderService, connectionManager).run();
                 return;
@@ -110,6 +137,25 @@ public final class StoApplication {
 
     private static boolean hasArg(String[] args, String expected) {
         return Arrays.asList(args).contains(expected);
+    }
+
+    private static int webPort(String webArg) {
+        String value = null;
+        if (webArg != null && webArg.startsWith("--web=")) {
+            value = webArg.substring("--web=".length());
+        }
+        if (value == null || value.isBlank()) {
+            value = System.getenv("STO_WEB_PORT");
+        }
+        if (value == null || value.isBlank()) {
+            return 8080;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException e) {
+            System.err.println("Некорректный порт '" + value + "', используется 8080.");
+            return 8080;
+        }
     }
 
     /**
@@ -139,6 +185,7 @@ public final class StoApplication {
                   --demo          автоматический сквозной сценарий
                   --check         проверить соединение и версию PostgreSQL
                   --list-orders   вывести заявки без аутентификации
+                  --web[=PORT]    REST API и Angular-интерфейс (по умолчанию 8080)
                   --help, -h      эта справка
 
                 Тестовые учётные записи:

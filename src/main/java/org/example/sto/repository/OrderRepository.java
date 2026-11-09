@@ -5,6 +5,7 @@ import org.example.sto.model.ClientOrder;
 import org.example.sto.model.Order;
 import org.example.sto.model.OrderStatus;
 import org.example.sto.model.OrderStatusLogEntry;
+import org.example.sto.model.OrderServiceItem;
 import org.example.sto.model.OrderSummary;
 
 import java.math.BigDecimal;
@@ -14,7 +15,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -90,6 +93,39 @@ public final class OrderRepository {
                         orders.add(mapOrder(resultSet));
                     }
                     return orders;
+                }
+            }
+        });
+    }
+
+    /**
+     * Оказанные услуги заявки с зафиксированной ценой и суммой по строке.
+     */
+    public List<OrderServiceItem> findServices(int orderId) {
+        return connectionManager.withConnection("orders.findServices", connection -> {
+            String sql = """
+                    SELECT osv.id, osv.service_id, s.name, osv.quantity, osv.price_at,
+                           osv.price_at * osv.quantity AS line_total
+                    FROM order_services osv
+                    JOIN services s ON s.id = osv.service_id
+                    WHERE osv.order_id = ?
+                    ORDER BY osv.id
+                    """;
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setInt(1, orderId);
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    List<OrderServiceItem> result = new ArrayList<>();
+                    while (resultSet.next()) {
+                        result.add(new OrderServiceItem(
+                                resultSet.getInt("id"),
+                                resultSet.getInt("service_id"),
+                                resultSet.getString("name"),
+                                resultSet.getInt("quantity"),
+                                resultSet.getBigDecimal("price_at"),
+                                resultSet.getBigDecimal("line_total")
+                        ));
+                    }
+                    return result;
                 }
             }
         });
@@ -202,8 +238,32 @@ public final class OrderRepository {
         });
     }
 
-    public List<OrderStatus> findStatuses() {
-        return connectionManager.withConnection("orders.findStatuses", connection -> {
+    /**
+     * Количество активных заявок по мастерам — для панели загрузки.
+     */
+    public Map<Integer, Integer> activeOrdersByMaster() {
+        return connectionManager.withConnection("orders.activeByMaster", connection -> {
+            String sql = """
+                    SELECT o.master_id, COUNT(*) AS cnt
+                    FROM orders o
+                    JOIN order_statuses s ON s.id = o.status_id
+                    WHERE o.master_id IS NOT NULL
+                      AND s.name IN ('новая', 'в работе')
+                    GROUP BY o.master_id
+                    ORDER BY o.master_id
+                    """;
+            try (PreparedStatement statement = connection.prepareStatement(sql);
+                 ResultSet resultSet = statement.executeQuery()) {
+                Map<Integer, Integer> result = new HashMap<>();
+                while (resultSet.next()) {
+                    result.put(resultSet.getInt("master_id"), resultSet.getInt("cnt"));
+                }
+                return result;
+            }
+        });
+    }
+
+    public List<OrderStatus> findStatuses() {        return connectionManager.withConnection("orders.findStatuses", connection -> {
             try (PreparedStatement statement = connection.prepareStatement(
                     "SELECT id, name FROM order_statuses ORDER BY id");
                  ResultSet resultSet = statement.executeQuery()) {

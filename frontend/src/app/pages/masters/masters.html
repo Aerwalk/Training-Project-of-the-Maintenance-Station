@@ -1,0 +1,134 @@
+<div class="page">
+  <div class="page-head">
+    <div>
+      <p class="eyebrow">Команда</p>
+      <h1 class="page-title">Мастера сервиса</h1>
+      <p class="page-sub">
+        Специализации и текущая загрузка. Мастера привязаны к пользователям системы и их ролям.
+      </p>
+    </div>
+    <div class="page-actions">
+      <button type="button" class="btn btn-ghost" (click)="load()" [disabled]="loading()">
+        <app-icon name="history" [size]="16" />
+        Обновить
+      </button>
+    </div>
+  </div>
+
+  <div class="mini-stats">
+    <div class="mini-stat">
+      <span class="mini-icon violet"><app-icon name="masters" [size]="18" /></span>
+      <span>
+        <strong>{{ masters().length }}</strong>
+        <span>{{ pluralWord(masters().length, 'мастер', 'мастера', 'мастеров') }} в базе</span>
+      </span>
+    </div>
+    <div class="mini-stat">
+      <span class="mini-icon green"><app-icon name="check" [size]="18" /></span>
+      <span>
+        <strong>{{ activeMasters() }}</strong>
+        <span>{{ pluralWord(activeMasters(), 'принимает заявки', 'принимают заявки', 'принимают заявки') }}</span>
+      </span>
+    </div>
+    <div class="mini-stat">
+      <span class="mini-icon blue"><app-icon name="settings" [size]="18" /></span>
+      <span>
+        <strong>{{ specializationCount() }}</strong>
+        <span>{{ pluralWord(specializationCount(), 'специализация', 'специализации', 'специализаций') }}</span>
+      </span>
+    </div>
+    <div class="mini-stat">
+      <span class="mini-icon orange"><app-icon name="clock" [size]="18" /></span>
+      <span>
+        <strong>{{ totalWorkload() }}</strong>
+        <span>{{ pluralWord(totalWorkload(), 'активная заявка', 'активные заявки', 'активных заявок') }}</span>
+      </span>
+    </div>
+  </div>
+
+  <div class="toolbar card">
+    <div class="result-count">
+      <strong>{{ filtered().length }}</strong>
+      {{ pluralWord(filtered().length, 'мастер', 'мастера', 'мастеров') }}
+    </div>
+    <div class="search masters-search">
+      <app-icon name="search" [size]="16" />
+      <input
+        type="search"
+        placeholder="Имя или специализация…"
+        [value]="search()"
+        (input)="search.set($any($event.target).value)"
+        aria-label="Поиск мастеров"
+      />
+      @if (search()) {
+        <button type="button" class="search-clear" (click)="search.set('')" aria-label="Очистить">
+          <app-icon name="close" [size]="13" />
+        </button>
+      }
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="master-grid">
+      @for (item of [1, 2, 3]; track item) {
+        <div class="skeleton master-skeleton"></div>
+      }
+    </div>
+  } @else if (filtered().length === 0) {
+    <div class="card">
+      <div class="empty">
+        <span class="empty-icon"><app-icon name="masters" [size]="22" /></span>
+        <strong>Мастера не найдены</strong>
+        <span>Попробуйте изменить поисковый запрос.</span>
+      </div>
+    </div>
+  } @else {
+    <div class="master-grid">
+      @for (master of filtered(); track master.id) {
+        <article class="master-card" [class.inactive]="!master.active">
+          <div class="master-head">
+            <span class="master-avatar" [style.background]="avatarGradient(master.id)">
+              {{ initials(master.fullName) }}
+            </span>
+            <div class="master-name">
+              <strong>{{ master.fullName }}</strong>
+              <span>{{ master.specialization || 'Универсальный мастер' }}</span>
+            </div>
+            <span class="badge" [class]="master.active ? 'badge done' : 'badge neutral'">
+              {{ master.active ? 'активен' : 'неактивен' }}
+            </span>
+          </div>
+
+          <div class="workload">
+            <div class="workload-head">
+              <span>Текущая загрузка</span>
+              <strong>{{ plural(workloadOf(master.id), 'заявка', 'заявки', 'заявок') }}</strong>
+            </div>
+            <div class="workload-track">
+              <span
+                class="workload-fill"
+                [style.width.%]="master.active ? workloadPercent(master.id) : 0"
+              ></span>
+            </div>
+          </div>
+
+          <div class="master-foot">
+            <span class="chip"><app-icon name="settings" [size]="13" /> ID {{ master.id }}</span>
+            <span class="chip"><app-icon name="clients" [size]="13" /> user #{{ master.userId }}</span>
+          </div>
+        </article>
+      }
+    </div>
+
+    <div class="master-note">
+      <span class="note-icon"><app-icon name="database" [size]="17" /></span>
+      <div>
+        <strong>Как добавить мастера?</strong>
+        <span>
+          Мастер создаётся вместе с пользователем в таблице <code>users</code> и записью в
+          <code>masters</code>. Загрузка считается по активным заявкам («новая» и «в работе»).
+        </span>
+      </div>
+    </div>
+  }
+</div>

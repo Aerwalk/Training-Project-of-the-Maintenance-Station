@@ -1,0 +1,288 @@
+<div class="page">
+  <div class="page-head">
+    <div>
+      <p class="eyebrow">Панель управления</p>
+      <h1 class="page-title">Добрый день, {{ greeting() }}</h1>
+      <p class="page-sub">
+        Сводка по сервису на сегодня. Данные читаются напрямую из PostgreSQL через модуль доступа.
+      </p>
+    </div>
+    <div class="page-actions">
+      <button type="button" class="btn btn-ghost" (click)="load()" [disabled]="loading()">
+        <app-icon name="history" [size]="16" />
+        Обновить
+      </button>
+      <a class="btn btn-primary" routerLink="/orders" [queryParams]="{ new: 1 }">
+        <app-icon name="plus" [size]="16" />
+        Новая заявка
+      </a>
+    </div>
+  </div>
+
+  @if (loading()) {
+    <div class="stat-grid">
+      @for (item of [1, 2, 3, 4]; track item) {
+        <div class="skeleton skeleton-card"></div>
+      }
+    </div>
+  } @else {
+    <div class="stat-grid">
+      <article class="stat-card">
+        <div class="stat-top">
+          <span class="stat-icon"><app-icon name="orders" [size]="19" /></span>
+          <span class="badge plain">всего</span>
+        </div>
+        <div class="stat-label">Заявки</div>
+        <div class="stat-value">{{ totalOrders() }}</div>
+        <div class="stat-foot">
+          <span class="stat-delta"><app-icon name="trend" [size]="13" /> {{ inProgress() }}</span>
+          сейчас в работе
+        </div>
+      </article>
+
+      <article class="stat-card">
+        <div class="stat-top">
+          <span class="stat-icon orange"><app-icon name="clock" [size]="19" /></span>
+          <span class="badge progress">активные</span>
+        </div>
+        <div class="stat-label">В работе</div>
+        <div class="stat-value">{{ inProgress() + newOrders() }}</div>
+        <div class="stat-foot">
+          {{ plural(newOrders(), 'новая', 'новые', 'новых') }} ·
+          {{ plural(inProgress(), 'в работе', 'в работе', 'в работе') }}
+        </div>
+      </article>
+
+      <article class="stat-card">
+        <div class="stat-top">
+          <span class="stat-icon green"><app-icon name="check" [size]="19" /></span>
+          <span class="badge done">{{ completionRate() }}%</span>
+        </div>
+        <div class="stat-label">Завершено</div>
+        <div class="stat-value">{{ completed() }}</div>
+        <div class="stat-foot">средний чек {{ money(avgCheck()) }}</div>
+      </article>
+
+      <article class="stat-card">
+        <div class="stat-top">
+          <span class="stat-icon teal"><app-icon name="ruble" [size]="19" /></span>
+          <span class="badge plain">выручка</span>
+        </div>
+        <div class="stat-label">Стоимость работ</div>
+        <div class="stat-value">{{ compactMoney(revenue()) }}</div>
+        <div class="stat-foot">по всем заявкам в базе</div>
+      </article>
+    </div>
+  }
+
+  <div class="grid-2">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Активные заявки</h2>
+          <p class="card-sub">Новые и находящиеся в работе</p>
+        </div>
+        <a class="card-link" routerLink="/orders">
+          Все заявки
+          <app-icon name="arrow" [size]="14" />
+        </a>
+      </div>
+
+      <div class="card-body tight">
+        @if (loading()) {
+          <div class="skeleton skeleton-row"></div>
+          <div class="skeleton skeleton-row"></div>
+          <div class="skeleton skeleton-row"></div>
+        } @else if (activeOrders().length === 0) {
+          <div class="empty">
+            <span class="empty-icon"><app-icon name="spark" [size]="22" /></span>
+            <strong>Очередь пуста</strong>
+            <span>Все заявки завершены — можно принимать новые.</span>
+          </div>
+        } @else {
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Заявка</th>
+                  <th>Клиент</th>
+                  <th>Автомобиль</th>
+                  <th>Статус</th>
+                  <th class="right">Стоимость</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (order of activeOrders(); track order.orderId) {
+                  <tr>
+                    <td>
+                      <a
+                        class="order-link"
+                        routerLink="/orders"
+                        [queryParams]="{ order: order.orderId }"
+                      >
+                        #{{ order.orderId }}
+                      </a>
+                    </td>
+                    <td class="strong">{{ order.client }}</td>
+                    <td><span class="chip plate">{{ order.car }}</span></td>
+                    <td>
+                      <span class="badge" [class]="'badge ' + statusClass(order.status)">
+                        {{ order.status }}
+                      </span>
+                    </td>
+                    <td class="right strong">{{ money(order.totalCost) }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    </section>
+
+    <div class="stack">
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">Статусы заявок</h2>
+            <p class="card-sub">Распределение по всей базе</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="donut-wrap">
+            <div class="donut" [style.background]="donutGradient()">
+              <div class="donut-center">
+                <strong>{{ totalOrders() }}</strong>
+                <span>{{ pluralWord(totalOrders(), 'заявка', 'заявки', 'заявок') }}</span>
+              </div>
+            </div>
+            <div class="legend">
+              @for (item of statusStats(); track item.id) {
+                <div class="legend-row">
+                  <span class="legend-dot" [style.background]="item.color"></span>
+                  <span>{{ item.name }}</span>
+                  <strong>{{ item.count }}</strong>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <h2 class="card-title">Данные в базе</h2>
+            <p class="card-sub">Справочники, доступные сервису</p>
+          </div>
+        </div>
+        <div class="card-body tight">
+          <div class="data-row">
+            <span class="data-icon blue"><app-icon name="clients" [size]="17" /></span>
+            <span class="data-label">Клиенты</span>
+            <strong>{{ clients().length }}</strong>
+          </div>
+          <div class="data-row">
+            <span class="data-icon teal"><app-icon name="car" [size]="17" /></span>
+            <span class="data-label">Автомобили</span>
+            <strong>{{ cars().length }}</strong>
+          </div>
+          <div class="data-row">
+            <span class="data-icon orange"><app-icon name="services" [size]="17" /></span>
+            <span class="data-label">Услуги</span>
+            <strong>{{ services().length }}</strong>
+          </div>
+          <div class="data-row">
+            <span class="data-icon violet"><app-icon name="masters" [size]="17" /></span>
+            <span class="data-label">Мастера</span>
+            <strong>{{ activeMasters() }} / {{ masters().length }}</strong>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="grid-2 dashboard-bottom">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Последние события</h2>
+          <p class="card-sub">Журнал изменений статусов от триггера БД</p>
+        </div>
+        <a class="card-link" routerLink="/log">
+          Весь журнал
+          <app-icon name="arrow" [size]="14" />
+        </a>
+      </div>
+      <div class="card-body">
+        @if (loading()) {
+          <div class="skeleton skeleton-row"></div>
+          <div class="skeleton skeleton-row"></div>
+        } @else if (logPreview().length === 0) {
+          <div class="empty">
+            <span class="empty-icon"><app-icon name="history" [size]="22" /></span>
+            <strong>Событий пока нет</strong>
+            <span>Журнал заполнится после изменения статуса заявки.</span>
+          </div>
+        } @else {
+          <div class="timeline">
+            @for (entry of logPreview(); track entry.id) {
+              <div class="timeline-item">
+                <span class="timeline-dot"><app-icon name="history" [size]="14" /></span>
+                <div class="timeline-body">
+                  <strong>
+                    Заявка #{{ entry.orderId }}: {{ entry.fromName }} → {{ entry.toName }}
+                  </strong>
+                  <span>{{ dateTime(entry.changedAt) }} · {{ entry.changedBy }}</span>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </section>
+
+    <section class="card finance-card">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Загрузка сервиса</h2>
+          <p class="card-sub">Доля завершённых заявок</p>
+        </div>
+        <span class="badge done">{{ completionRate() }}%</span>
+      </div>
+      <div class="card-body">
+        <div class="progress-row">
+          <span>Завершено</span>
+          <strong>{{ completed() }} из {{ totalOrders() }}</strong>
+        </div>
+        <div class="progress-track">
+          <span class="progress-fill" [style.width.%]="completionRate()"></span>
+        </div>
+
+        <div class="finance-stats">
+          <div>
+            <span>Выручка</span>
+            <strong>{{ money(revenue()) }}</strong>
+          </div>
+          <div>
+            <span>Средний чек</span>
+            <strong>{{ money(avgCheck()) }}</strong>
+          </div>
+        </div>
+
+        <div class="quick-actions">
+          <a class="quick" routerLink="/clients">
+            <span class="quick-icon"><app-icon name="clients" [size]="16" /></span>
+            Добавить клиента
+            <app-icon name="arrow" [size]="14" />
+          </a>
+          <a class="quick" routerLink="/services">
+            <span class="quick-icon"><app-icon name="services" [size]="16" /></span>
+            Прайс-лист услуг
+            <app-icon name="arrow" [size]="14" />
+          </a>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>

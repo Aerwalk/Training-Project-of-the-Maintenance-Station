@@ -45,6 +45,10 @@ public final class CatalogService {
         return clientRepository.findAll();
     }
 
+    public List<Car> cars() {
+        return carRepository.findAll();
+    }
+
     public List<Car> clientCars(int clientId) {
         return carRepository.findByClientId(clientId);
     }
