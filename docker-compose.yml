@@ -1,0 +1,28 @@
+name: sto
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sto-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sto}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      - "${STO_DB_PORT:-5434}:5432"
+    volumes:
+      - sto_pgdata:/var/lib/postgresql/data
+      - ./sto.sql:/docker-entrypoint-initdb.d/01_sto.sql:ro
+      - ./docker/init/02_seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-sto}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  sto_pgdata:
+    name: sto_pgdata
