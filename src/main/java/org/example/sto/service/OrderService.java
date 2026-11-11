@@ -1,5 +1,6 @@
 package org.example.sto.service;
 
+import org.example.sto.exception.AccessDeniedException;
 import org.example.sto.exception.EntityNotFoundException;
 import org.example.sto.exception.ValidationException;
 import org.example.sto.model.ClientOrder;
@@ -9,7 +10,10 @@ import org.example.sto.model.OrderServiceItem;
 import org.example.sto.model.OrderStatus;
 import org.example.sto.model.OrderStatusLogEntry;
 import org.example.sto.model.OrderSummary;
+import org.example.sto.model.Permission;
+import org.example.sto.model.RolePermissions;
 import org.example.sto.model.Service;
+import org.example.sto.model.User;
 import org.example.sto.repository.CarRepository;
 import org.example.sto.repository.ClientRepository;
 import org.example.sto.repository.MasterRepository;
@@ -54,9 +58,44 @@ public final class OrderService {
         return orderRepository.findAllSummaries();
     }
 
+    /**
+     * Заявки, видимые текущему пользователю: сотрудники видят все,
+     * клиент — только свои.
+     */
+    public List<OrderSummary> listVisible(User user) {
+        if (RolePermissions.of(user.role()).can(Permission.VIEW_ALL_ORDERS)) {
+            return listAll();
+        }
+        if (user.clientId() == null) {
+            throw new AccessDeniedException(
+                    "Учётная запись не привязана к карточке клиента — заявки недоступны");
+        }
+        return orderRepository.findSummariesByClientId(user.clientId());
+    }
+
     public Order getOrder(int orderId) {
         return orderRepository.findById(orderId)
                 .orElseThrow(() -> new EntityNotFoundException("Заявка с id=" + orderId + " не найдена"));
+    }
+
+    /**
+     * Возвращает заявку, только если она доступна пользователю.
+     * Клиент не может открыть заявку другого клиента по номеру.
+     */
+    public Order getOrderVisible(User user, int orderId) {
+        Order order = getOrder(orderId);
+        if (!RolePermissions.of(user.role()).can(Permission.VIEW_ALL_ORDERS)
+                && (user.clientId() == null || order.clientId() != user.clientId())) {
+            throw new AccessDeniedException(
+                    "Заявка №" + orderId + " недоступна: она принадлежит другому клиенту");
+        }
+        return order;
+    }
+
+    /** Создание заявки с проверкой права CREATE_ORDER. */
+    public int createOrder(User user, int clientId, int carId, Integer masterId, String description) {
+        require(user, Permission.CREATE_ORDER);
+        return createOrder(clientId, carId, masterId, description);
     }
 
     public int createOrder(int clientId, int carId, Integer masterId, String description) {
@@ -85,6 +124,13 @@ public final class OrderService {
         return orderRepository.createOrder(clientId, carId, masterId, description.trim());
     }
 
+    /** Добавление услуги с проверкой права ADD_ORDER_SERVICE. */
+    public void addService(User user, int orderId, int serviceId, int quantity) {
+        require(user, Permission.ADD_ORDER_SERVICE);
+        getOrderVisible(user, orderId);
+        addService(orderId, serviceId, quantity);
+    }
+
     public void addService(int orderId, int serviceId, int quantity) {
         if (quantity <= 0 || quantity > 100) {
             throw new ValidationException("Количество должно быть от 1 до 100");
@@ -97,6 +143,13 @@ public final class OrderService {
         Service service = serviceRepository.findById(serviceId)
                 .orElseThrow(() -> new EntityNotFoundException("Услуга с id=" + serviceId + " не найдена"));
         orderRepository.addService(orderId, service.id(), quantity);
+    }
+
+    /** Закрытие заявки с проверкой права CLOSE_ORDER. */
+    public void closeOrder(User user, int orderId) {
+        require(user, Permission.CLOSE_ORDER);
+        getOrderVisible(user, orderId);
+        closeOrder(orderId);
     }
 
     public void closeOrder(int orderId) {
@@ -115,8 +168,18 @@ public final class OrderService {
         return orderRepository.calculateTotal(orderId);
     }
 
+    public BigDecimal calculateTotal(User user, int orderId) {
+        getOrderVisible(user, orderId);
+        return orderRepository.calculateTotal(orderId);
+    }
+
     public List<OrderServiceItem> orderServices(int orderId) {
         getOrder(orderId);
+        return orderRepository.findServices(orderId);
+    }
+
+    public List<OrderServiceItem> orderServices(User user, int orderId) {
+        getOrderVisible(user, orderId);
         return orderRepository.findServices(orderId);
     }
 
@@ -142,6 +205,25 @@ public final class OrderService {
 
     public List<OrderStatusLogEntry> statusLog(Integer orderId) {
         return orderRepository.findStatusLog(orderId);
+    }
+
+    /**
+     * Журнал статусов с учётом прав: клиент может смотреть историю только
+     * собственных заявок, а весь журнал доступен лишь сотрудникам.
+     */
+    public List<OrderStatusLogEntry> statusLog(User user, Integer orderId) {
+        if (orderId != null) {
+            getOrderVisible(user, orderId);
+        } else if (!RolePermissions.of(user.role()).can(Permission.VIEW_ALL_ORDERS)) {
+            throw new AccessDeniedException("Журнал доступен только сотрудникам сервиса");
+        }
+        return orderRepository.findStatusLog(orderId);
+    }
+
+    private static void require(User user, Permission permission) {
+        if (user == null || !RolePermissions.of(user.role()).can(permission)) {
+            throw new AccessDeniedException("Недостаточно прав для этой операции");
+        }
     }
 
     public Map<Integer, Integer> masterWorkload() {

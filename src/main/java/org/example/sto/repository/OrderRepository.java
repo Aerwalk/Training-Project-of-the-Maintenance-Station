@@ -57,6 +57,37 @@ public final class OrderRepository {
         });
     }
 
+    /**
+     * Заявки только указанного клиента — используется ролью client.
+     */
+    public List<OrderSummary> findSummariesByClientId(int clientId) {
+        return connectionManager.withConnection("orders.findSummariesByClientId", connection -> {
+            String sql = """
+                    SELECT v.order_id, v.client, v.car, v.status, v.total_cost
+                    FROM v_order_total v
+                    JOIN orders o ON o.id = v.order_id
+                    WHERE o.client_id = ?
+                    ORDER BY v.order_id DESC
+                    """;
+            try (PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setInt(1, clientId);
+                try (ResultSet resultSet = statement.executeQuery()) {
+                    List<OrderSummary> result = new ArrayList<>();
+                    while (resultSet.next()) {
+                        result.add(new OrderSummary(
+                                resultSet.getInt("order_id"),
+                                resultSet.getString("client"),
+                                resultSet.getString("car"),
+                                resultSet.getString("status"),
+                                resultSet.getBigDecimal("total_cost")
+                        ));
+                    }
+                    return result;
+                }
+            }
+        });
+    }
+
     public Optional<Order> findById(int orderId) {
         return connectionManager.withConnection("orders.findById", connection -> {
             String sql = """

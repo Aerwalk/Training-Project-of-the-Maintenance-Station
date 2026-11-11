@@ -12,6 +12,8 @@ import org.example.sto.model.Order;
 import org.example.sto.model.OrderStatus;
 import org.example.sto.model.OrderStatusLogEntry;
 import org.example.sto.model.OrderSummary;
+import org.example.sto.model.Permission;
+import org.example.sto.model.RolePermissions;
 import org.example.sto.model.Service;
 import org.example.sto.model.User;
 import org.example.sto.service.AuthService;
@@ -24,15 +26,16 @@ import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Консольный интерфейс учебного приложения СТО.
  */
 public final class ConsoleMenu {
 
-    private static final Set<String> STAFF_ROLES = Set.of("admin", "manager", "master");
+    private record MenuItem(String title, Runnable action) {
+    }
 
     private final AuthService authService;
     private final CatalogService catalogService;
@@ -65,26 +68,18 @@ public final class ConsoleMenu {
         out.println();
         out.printf("Вы вошли как %s (%s, роль: %s)%n", user.fullName(), user.username(), user.role());
 
-        boolean staff = STAFF_ROLES.contains(user.role());
+        List<MenuItem> items = menuItems(user);
         boolean running = true;
         while (running) {
-            printMenu(staff, user.role());
+            printMenu(user.role(), items);
             int choice = readInt("Выберите пункт: ", -1);
             try {
-                switch (choice) {
-                    case 1 -> showOrders();
-                    case 2 -> { if (staff) showClients(); else unknown(); }
-                    case 3 -> { if (staff) showClientCars(); else unknown(); }
-                    case 4 -> showServices();
-                    case 5 -> { if (staff) createOrder(user); else unknown(); }
-                    case 6 -> { if (staff) addService(); else unknown(); }
-                    case 7 -> { if (staff) closeOrder(); else unknown(); }
-                    case 8 -> showTotal();
-                    case 9 -> showClientOrders();
-                    case 10 -> { if (staff) showStatusLog(); else unknown(); }
-                    case 11 -> ping();
-                    case 0 -> running = false;
-                    default -> out.println("Неизвестный пункт меню.");
+                if (choice == 0) {
+                    running = false;
+                } else if (choice < 1 || choice > items.size()) {
+                    out.println("Неизвестный пункт меню.");
+                } else {
+                    items.get(choice - 1).action().run();
                 }
             } catch (DatabaseException e) {
                 out.println("Ошибка БД: " + e.getMessage());
@@ -93,9 +88,49 @@ public final class ConsoleMenu {
                 }
             } catch (ValidationException | EntityNotFoundException e) {
                 out.println("Ошибка: " + e.getMessage());
+            } catch (RuntimeException e) {
+                out.println("Ошибка: " + e.getMessage());
             }
         }
         out.println("Работа завершена.");
+    }
+
+    /**
+     * Меню строится по правам роли: клиент не увидит операции сотрудников,
+     * мастер — управление справочниками и журнал.
+     */
+    private List<MenuItem> menuItems(User user) {
+        RolePermissions permissions = RolePermissions.of(user.role());
+        List<MenuItem> items = new ArrayList<>();
+        items.add(new MenuItem("Список заявок (представление v_order_total)",
+                () -> showOrders(user)));
+        if (permissions.can(Permission.VIEW_CLIENTS)) {
+            items.add(new MenuItem("Список клиентов", this::showClients));
+        }
+        if (permissions.can(Permission.VIEW_CARS)) {
+            items.add(new MenuItem("Автомобили клиента", this::showClientCars));
+        }
+        if (permissions.can(Permission.VIEW_SERVICES)) {
+            items.add(new MenuItem("Список услуг", this::showServices));
+        }
+        if (permissions.can(Permission.CREATE_ORDER)) {
+            items.add(new MenuItem("Создать заявку (create_order)", () -> createOrder(user)));
+        }
+        if (permissions.can(Permission.ADD_ORDER_SERVICE)) {
+            items.add(new MenuItem("Добавить услугу (add_service_to_order)", () -> addService(user)));
+        }
+        if (permissions.can(Permission.CLOSE_ORDER)) {
+            items.add(new MenuItem("Закрыть заявку (close_order)", () -> closeOrder(user)));
+        }
+        items.add(new MenuItem("Рассчитать стоимость (calculate_order_total)",
+                () -> showTotal(user)));
+        items.add(new MenuItem("Заявки клиента (get_client_orders)",
+                () -> showClientOrders(user)));
+        if (permissions.can(Permission.VIEW_LOG)) {
+            items.add(new MenuItem("Журнал статусов", () -> showStatusLog(user)));
+        }
+        items.add(new MenuItem("Проверить соединение с БД", this::ping));
+        return items;
     }
 
     private User login() {
@@ -148,31 +183,17 @@ public final class ConsoleMenu {
         out.println("==============================================================");
     }
 
-    private void printMenu(boolean staff, String role) {
+    private void printMenu(String role, List<MenuItem> items) {
         out.println();
         out.println("--- Главное меню (" + role + ") ---");
-        out.println(" 1. Список заявок (представление v_order_total)");
-        if (staff) {
-            out.println(" 2. Список клиентов");
-            out.println(" 3. Автомобили клиента");
+        for (int index = 0; index < items.size(); index++) {
+            out.printf("%2d. %s%n", index + 1, items.get(index).title());
         }
-        out.println(" 4. Список услуг");
-        if (staff) {
-            out.println(" 5. Создать заявку (create_order)");
-            out.println(" 6. Добавить услугу (add_service_to_order)");
-            out.println(" 7. Закрыть заявку (close_order)");
-        }
-        out.println(" 8. Рассчитать стоимость (calculate_order_total)");
-        out.println(" 9. Заявки клиента (get_client_orders)");
-        if (staff) {
-            out.println("10. Журнал статусов");
-        }
-        out.println("11. Проверить соединение с БД");
         out.println(" 0. Выход");
     }
 
-    private void showOrders() {
-        List<OrderSummary> orders = orderService.listAll();
+    private void showOrders(User user) {
+        List<OrderSummary> orders = orderService.listVisible(user);
         out.println();
         out.printf("%-4s %-32s %-13s %-13s %12s%n", "ID", "Клиент", "Авто", "Статус", "Стоимость");
         out.println("-".repeat(80));
@@ -257,29 +278,40 @@ public final class ConsoleMenu {
         out.println("Создана заявка №" + orderId + " (пользователь: " + user.username() + ")");
     }
 
-    private void addService() {
+    private void addService(User user) {
         showServices();
         int orderId = readInt("ID заявки: ", -1);
         int serviceId = readInt("ID услуги: ", -1);
         int quantity = readInt("Количество (1..100): ", 1);
-        orderService.addService(orderId, serviceId, quantity);
+        orderService.addService(user, orderId, serviceId, quantity);
         out.println("Услуга добавлена в заявку №" + orderId);
     }
 
-    private void closeOrder() {
+    private void closeOrder(User user) {
         int orderId = readInt("ID заявки для закрытия: ", -1);
-        orderService.closeOrder(orderId);
-        BigDecimal total = orderService.calculateTotal(orderId);
+        orderService.closeOrder(user, orderId);
+        BigDecimal total = orderService.calculateTotal(user, orderId);
         out.println("Заявка №" + orderId + " завершена. Итоговая стоимость: " + total);
     }
 
-    private void showTotal() {
+    private void showTotal(User user) {
         int orderId = readInt("ID заявки: ", -1);
-        out.println("Стоимость заявки №" + orderId + ": " + orderService.calculateTotal(orderId));
+        out.println("Стоимость заявки №" + orderId + ": " + orderService.calculateTotal(user, orderId));
     }
 
-    private void showClientOrders() {
-        int clientId = readInt("ID клиента: ", -1);
+    private void showClientOrders(User user) {
+        RolePermissions permissions = RolePermissions.of(user.role());
+        int clientId;
+        if (permissions.can(Permission.VIEW_ALL_ORDERS)) {
+            showClients();
+            clientId = readInt("ID клиента: ", -1);
+        } else {
+            if (user.clientId() == null) {
+                out.println("Учётная запись не привязана к карточке клиента.");
+                return;
+            }
+            clientId = user.clientId();
+        }
         List<ClientOrder> orders = orderService.clientOrders(clientId);
         out.println();
         out.printf("%-4s %-14s %-14s %12s %-20s%n", "ID", "Авто", "Статус", "Стоимость", "Создана");
@@ -293,7 +325,7 @@ public final class ConsoleMenu {
         }
     }
 
-    private void showStatusLog() {
+    private void showStatusLog(User user) {
         out.print("ID заявки (Enter — весь журнал): ");
         out.flush();
         String value = readLine();
@@ -305,7 +337,7 @@ public final class ConsoleMenu {
                 throw new ValidationException("ID заявки должен быть целым числом");
             }
         }
-        List<OrderStatusLogEntry> entries = orderService.statusLog(orderId);
+        List<OrderStatusLogEntry> entries = orderService.statusLog(user, orderId);
         out.println();
         out.printf("%-4s %-6s %-8s %-8s %-20s %-20s%n", "ID", "Заявка", "Было", "Стало", "Когда", "Кто");
         out.println("-".repeat(76));
@@ -321,10 +353,6 @@ public final class ConsoleMenu {
     private void ping() {
         String version = connectionManager.ping();
         out.println("Соединение с БД установлено. Версия сервера: " + version);
-    }
-
-    private void unknown() {
-        out.println("Недостаточно прав для этой операции.");
     }
 
     private int readInt(String prompt, int defaultValue) {

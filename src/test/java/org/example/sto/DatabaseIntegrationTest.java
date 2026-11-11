@@ -4,6 +4,7 @@ import org.example.sto.config.AppConfig;
 import org.example.sto.config.DbSettings;
 import org.example.sto.db.ConnectionManager;
 import org.example.sto.db.RetryPolicy;
+import org.example.sto.exception.AccessDeniedException;
 import org.example.sto.exception.AuthenticationException;
 import org.example.sto.exception.DataIntegrityException;
 import org.example.sto.exception.ForeignKeyViolationException;
@@ -114,6 +115,40 @@ class DatabaseIntegrationTest {
     void rejectsWrongPassword() {
         assertThrows(AuthenticationException.class,
                 () -> authService.login("admin", "wrong-password".toCharArray()));
+    }
+
+    @Test
+    void clientAccountIsBoundToClientCard() {
+        User user = authService.login("client", "client123".toCharArray());
+
+        assertEquals("client", user.role());
+        assertNotNull(user.clientId());
+        assertEquals("Иванов Иван Иванович", catalogService.clientById(user.clientId()).fullName());
+    }
+
+    @Test
+    void clientSeesOnlyOwnOrders() {
+        User user = authService.login("client", "client123".toCharArray());
+        List<OrderSummary> visible = orderService.listVisible(user);
+        List<Integer> ownOrderIds = orderService.clientOrders(user.clientId()).stream()
+                .map(ClientOrder::orderId)
+                .toList();
+
+        assertFalse(visible.isEmpty());
+        assertTrue(visible.stream().allMatch(order -> ownOrderIds.contains(order.orderId())));
+    }
+
+    @Test
+    void clientCannotOpenForeignOrder() {
+        User user = authService.login("client", "client123".toCharArray());
+        Order foreign = orderService.listAll().stream()
+                .map(summary -> orderService.getOrder(summary.orderId()))
+                .filter(order -> order.clientId() != user.clientId())
+                .findFirst()
+                .orElseThrow();
+
+        assertThrows(AccessDeniedException.class,
+                () -> orderService.getOrderVisible(user, foreign.id()));
     }
 
     @Test

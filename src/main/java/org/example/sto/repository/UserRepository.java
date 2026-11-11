@@ -27,7 +27,7 @@ public final class UserRepository {
             String finalPassword = passwordText;
             return connectionManager.withConnection("users.authenticate", connection -> {
                 String sql = """
-                        SELECT u.id, u.username, u.full_name, r.name AS role
+                        SELECT u.id, u.username, u.full_name, r.name AS role, u.client_id
                         FROM users u
                         JOIN roles r ON r.id = u.role_id
                         WHERE u.username = ?
@@ -49,7 +49,7 @@ public final class UserRepository {
     public List<User> findAll() {
         return connectionManager.withConnection("users.findAll", connection -> {
             String sql = """
-                    SELECT u.id, u.username, u.full_name, r.name AS role
+                    SELECT u.id, u.username, u.full_name, r.name AS role, u.client_id
                     FROM users u
                     JOIN roles r ON r.id = u.role_id
                     ORDER BY u.id
@@ -66,11 +66,14 @@ public final class UserRepository {
     }
 
     private User mapUser(ResultSet resultSet) throws java.sql.SQLException {
+        int clientId = resultSet.getInt("client_id");
+        Integer nullableClientId = resultSet.wasNull() ? null : clientId;
         return new User(
                 resultSet.getInt("id"),
                 resultSet.getString("username"),
                 resultSet.getString("full_name"),
-                resultSet.getString("role")
+                resultSet.getString("role"),
+                nullableClientId
         );
     }
 }
